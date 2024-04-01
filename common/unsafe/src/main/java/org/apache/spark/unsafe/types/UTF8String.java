@@ -21,9 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -448,15 +446,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromString(toString().toUpperCase());
   }
 
-  private class LowercaseIterator {
-
+  private static class LowercaseIterator {
     private static final Map<Integer, byte[]> lowercaseMapping = initLowercaseMapping();
-
-    private int nextOuter;
-    private int outerPtr;
-    private int innerPtr;
-    private int bufferLen;
-    private byte[] buffer;
 
     private static Map<Integer, byte[]> initLowercaseMapping() {
       Map<Integer, byte[]> m = new HashMap<>();
@@ -477,54 +468,85 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         }
       return m;
     }
-
-    private void updateBuffer() {
-      outerPtr = nextOuter;
-      innerPtr = 0;
-      if (nextOuter >= numBytes)
-        return;
-      byte curr = getByte(outerPtr);
-      int len = Math.min(numBytesForFirstByte(curr), numBytes - outerPtr);
-      int input = 0;
-      for (int i = 0; i < len; i++) {
-        input = (input << 8) | (0xFF & getByte(nextOuter));
-        nextOuter++;
-      }
-      buffer = lowercaseMapping.get(input);
-      bufferLen = buffer == null ? len : buffer.length;
-    }
-
-    public boolean hasNext() {
-      return outerPtr < numBytes;
-    }
-
-    public byte getNext() {
-      byte res = buffer == null ? getByte(outerPtr + innerPtr) : buffer[innerPtr];
-      innerPtr++;
-      if (innerPtr == bufferLen)
-        updateBuffer();
-      return res;
-    }
-
-    public LowercaseIterator() {
-      nextOuter = 0;
-      updateBuffer();
-    }
   }
 
   public int compareLowercase(UTF8String right) {
-    LowercaseIterator leftIterator = new LowercaseIterator();
-    LowercaseIterator rightIterator = right.new LowercaseIterator();
-    while (leftIterator.hasNext() && rightIterator.hasNext()) {
-      byte leftByte = leftIterator.getNext();
-      byte rightByte = rightIterator.getNext();
+    int leftNextOuter = 0, rightNextOuter = 0;
+    int leftOuterPtr = 0, rightOuterPtr = 0;
+    int leftInnerPtr = 0, rightInnerPtr = 0;
+    int leftBufferLen = 0, rightBufferLen = 0;
+    byte[] leftBuffer = null, rightBuffer = null;
+
+    // left init
+    if (leftNextOuter < numBytes) {
+      byte curr = getByte(leftOuterPtr);
+      int len = Math.min(numBytesForFirstByte(curr), numBytes - leftOuterPtr);
+      int input = 0;
+      for (int i = 0; i < len; i++) {
+        input = (input << 8) | (0xFF & getByte(leftNextOuter));
+        leftNextOuter++;
+      }
+      leftBuffer = LowercaseIterator.lowercaseMapping.get(input);
+      leftBufferLen = leftBuffer == null ? len : leftBuffer.length;
+    }
+
+    // right init
+    if (rightNextOuter < right.numBytes) {
+      byte curr = right.getByte(rightOuterPtr);
+      int len = Math.min(numBytesForFirstByte(curr), right.numBytes - rightOuterPtr);
+      int input = 0;
+      for (int i = 0; i < len; i++) {
+        input = (input << 8) | (0xFF & right.getByte(rightNextOuter));
+        rightNextOuter++;
+      }
+      rightBuffer = LowercaseIterator.lowercaseMapping.get(input);
+      rightBufferLen = rightBuffer == null ? len : rightBuffer.length;
+    }
+
+    while (leftOuterPtr < leftNextOuter && rightOuterPtr < rightNextOuter) {
+      byte leftByte = leftBuffer == null ? getByte(leftOuterPtr + leftInnerPtr) : leftBuffer[leftInnerPtr];
+      leftInnerPtr++;
+      if (leftInnerPtr == leftBufferLen) {
+        leftOuterPtr = leftNextOuter;
+        leftInnerPtr = 0;
+        if (leftNextOuter < numBytes) {
+          byte curr = getByte(leftOuterPtr);
+          int len = Math.min(numBytesForFirstByte(curr), numBytes - leftOuterPtr);
+          int input = 0;
+          for (int i = 0; i < len; i++) {
+            input = (input << 8) | (0xFF & getByte(leftNextOuter));
+            leftNextOuter++;
+          }
+          leftBuffer = LowercaseIterator.lowercaseMapping.get(input);
+          leftBufferLen = leftBuffer == null ? len : leftBuffer.length;
+        }
+      }
+
+      byte rightByte = rightBuffer == null ? right.getByte(rightOuterPtr + rightInnerPtr) : rightBuffer[rightInnerPtr];
+      rightInnerPtr++;
+      if (rightInnerPtr == rightBufferLen) {
+        rightOuterPtr = rightNextOuter;
+        rightInnerPtr = 0;
+        if (rightNextOuter < right.numBytes) {
+          byte curr = right.getByte(rightOuterPtr);
+          int len = Math.min(numBytesForFirstByte(curr), right.numBytes - rightOuterPtr);
+          int input = 0;
+          for (int i = 0; i < len; i++) {
+            input = (input << 8) | (0xFF & right.getByte(rightNextOuter));
+            rightNextOuter++;
+          }
+          rightBuffer = LowercaseIterator.lowercaseMapping.get(input);
+          rightBufferLen = rightBuffer == null ? len : rightBuffer.length;
+        }
+      }
+
       int cmp = Byte.compare(leftByte, rightByte);
       if (cmp != 0)
         return cmp;
     }
-    if (leftIterator.hasNext())
+    if (leftOuterPtr < leftNextOuter)
       return 1;
-    if (rightIterator.hasNext())
+    if (rightOuterPtr < rightNextOuter)
       return -1;
     return 0;
   }
