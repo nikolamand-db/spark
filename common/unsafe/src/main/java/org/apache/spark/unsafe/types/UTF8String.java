@@ -22,6 +22,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -445,6 +446,87 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private UTF8String toUpperCaseSlow() {
     return fromString(toString().toUpperCase());
+  }
+
+  private class LowercaseIterator {
+
+    private static final Map<Integer, byte[]> lowercaseMapping = initLowercaseMapping();
+
+    private int nextOuter;
+    private int outerPtr;
+    private int innerPtr;
+    private int bufferLen;
+    private byte[] buffer;
+
+    private static Map<Integer, byte[]> initLowercaseMapping() {
+      Map<Integer, byte[]> m = new HashMap<>();
+      for (int cp = Character.MIN_CODE_POINT; cp <= Character.MAX_CODE_POINT; cp++)
+        if (Character.getType(cp) != Character.SURROGATE && Character.toLowerCase(cp) != cp) {
+          String fromStr = new String(Character.toChars(cp));
+          byte[] fromBytes = fromStr.getBytes(StandardCharsets.UTF_8);
+          byte[] toBytes = fromStr.toLowerCase().getBytes(StandardCharsets.UTF_8);
+          if (!Arrays.equals(fromBytes, toBytes)) {
+            int fromInt = 0;
+            int start = 0, len = fromBytes.length;
+            while (len-- > 0) {
+              fromInt = (fromInt << 8) | (0xFF & fromBytes[start]);
+              start++;
+            }
+            m.put(fromInt, toBytes);
+          }
+        }
+      return m;
+    }
+
+    private void updateBuffer() {
+      outerPtr = nextOuter;
+      innerPtr = 0;
+      if (nextOuter >= numBytes)
+        return;
+      byte curr = getByte(outerPtr);
+      int len = Math.min(numBytesForFirstByte(curr), numBytes - outerPtr);
+      int input = 0;
+      for (int i = 0; i < len; i++) {
+        input = (input << 8) | (0xFF & getByte(nextOuter));
+        nextOuter++;
+      }
+      buffer = lowercaseMapping.get(input);
+      bufferLen = buffer == null ? len : buffer.length;
+    }
+
+    public boolean hasNext() {
+      return outerPtr < numBytes;
+    }
+
+    public byte getNext() {
+      byte res = buffer == null ? getByte(outerPtr + innerPtr) : buffer[innerPtr];
+      innerPtr++;
+      if (innerPtr == bufferLen)
+        updateBuffer();
+      return res;
+    }
+
+    public LowercaseIterator() {
+      nextOuter = 0;
+      updateBuffer();
+    }
+  }
+
+  public int compareLowercase(UTF8String right) {
+    LowercaseIterator leftIterator = new LowercaseIterator();
+    LowercaseIterator rightIterator = right.new LowercaseIterator();
+    while (leftIterator.hasNext() && rightIterator.hasNext()) {
+      byte leftByte = leftIterator.getNext();
+      byte rightByte = rightIterator.getNext();
+      int cmp = Byte.compare(leftByte, rightByte);
+      if (cmp != 0)
+        return cmp;
+    }
+    if (leftIterator.hasNext())
+      return 1;
+    if (rightIterator.hasNext())
+      return -1;
+    return 0;
   }
 
   /**

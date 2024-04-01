@@ -107,6 +107,15 @@ public class UTF8StringSuite {
     assertTrue(fromString("你好123").binaryCompare(fromString("你好122")) > 0);
   }
 
+  @Test
+  public void lowercaseComparison() {
+    assertEquals(fromString("aaa").compareLowercase(fromString("AAA")), 0);
+    assertTrue(fromString("aaa").compareLowercase(fromString("AAAA")) < 0);
+    assertTrue(fromString("AAA").compareLowercase(fromString("aaaa")) < 0);
+    assertTrue(fromString("a").compareLowercase(fromString("B")) < 0);
+    assertTrue(fromString("b").compareLowercase(fromString("A")) > 0);
+  }
+
   protected static void testUpperandLower(String upper, String lower) {
     UTF8String us = fromString(upper);
     UTF8String ls = fromString(lower);
