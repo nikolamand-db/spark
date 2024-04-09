@@ -21,7 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Levenshtein, Literal, SoundEx, StringRepeat}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -34,6 +34,9 @@ class CollationStringExpressionsSuite
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
+
+  val binaryLcaseCollation: StringType =
+    StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID)
 
 
   test("Support ConcatWs string expression with Collation") {
@@ -87,6 +90,16 @@ class CollationStringExpressionsSuite
     testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
     testRepeat("UNICODE", 2, "abc", 2)
     testRepeat("UNICODE_CI", 3, "abc", 2)
+  }
+
+  test("Levenshtein, SoundEx & Luhncheck expressions with collation") {
+    checkEvaluation(Levenshtein(Literal.create("a", binaryLcaseCollation),
+      Literal.create("b", binaryLcaseCollation)), 1)
+    checkEvaluation(Levenshtein(Literal.create("aaa", binaryLcaseCollation),
+      Literal.create("bbb", binaryLcaseCollation), Some(Literal.create(1))), -1)
+    checkEvaluation(SoundEx(Literal.create("a", binaryLcaseCollation)), "A000")
+    // runtime replacement
+    checkAnswer(sql("select luhn_check('1234567897' collate utf8_binary_lcase)"), Seq(Row(true)))
   }
 
   // TODO: Add more tests for other string expressions

@@ -2213,8 +2213,8 @@ case class Levenshtein(
   }
 
   override def inputTypes: Seq[AbstractDataType] = threshold match {
-    case Some(_) => Seq(StringType, StringType, IntegerType)
-    case _ => Seq(StringType, StringType)
+    case Some(_) => Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
+    case _ => Seq(StringTypeAnyCollation, StringTypeAnyCollation)
   }
 
   override def children: Seq[Expression] = threshold match {
@@ -2337,9 +2337,9 @@ case class Levenshtein(
 case class SoundEx(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = child.dataType
 
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
 
@@ -3305,7 +3305,7 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
     Seq(input),
     inputTypes)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override def prettyName: String = "luhn_check"
 
